@@ -1,0 +1,23 @@
+package routes
+
+import (
+	"net/http"
+
+	"github.com/sashank33v/recallengine/internal/handler"
+	"github.com/sashank33v/recallengine/internal/middleware"
+	"github.com/sashank33v/recallengine/internal/service"
+)
+
+func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, authservice *service.AuthService) http.Handler {
+	mux := http.NewServeMux()
+	auth := middleware.Auth(authservice)
+	mux.HandleFunc("GET /healthz", handler.HealthHandler)
+	mux.HandleFunc("POST /signup", Authhandler.Signup)
+	mux.HandleFunc("POST /login", Authhandler.Login)
+
+	mux.Handle("GET /me", auth(http.HandlerFunc(Authhandler.Me)))
+	mux.Handle("POST /notes", auth(http.HandlerFunc(notehandler.Create)))
+	mux.Handle("GET /notes", auth(http.HandlerFunc(notehandler.List)))
+	mux.Handle("POST /questions", auth(http.HandlerFunc(questionhandler.Create)))
+	return mux
+}
