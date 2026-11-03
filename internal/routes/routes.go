@@ -8,7 +8,7 @@ import (
 	"github.com/sashank33v/recallengine/internal/service"
 )
 
-func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, authservice *service.AuthService) http.Handler {
+func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, studyhandler *handler.StudyHandler, authservice *service.AuthService) http.Handler {
 	mux := http.NewServeMux()
 	auth := middleware.Auth(authservice)
 	mux.HandleFunc("GET /healthz", handler.HealthHandler)
@@ -19,5 +19,8 @@ func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandle
 	mux.Handle("POST /notes", auth(http.HandlerFunc(notehandler.Create)))
 	mux.Handle("GET /notes", auth(http.HandlerFunc(notehandler.List)))
 	mux.Handle("POST /questions", auth(http.HandlerFunc(questionhandler.Create)))
+	mux.Handle("GET /study/due", auth(http.HandlerFunc(studyhandler.Due)))
+	mux.Handle("POST /study/answer", auth(http.HandlerFunc(studyhandler.Answer)))
+	mux.Handle("GET /questions", auth(http.HandlerFunc(questionhandler.List)))
 	return mux
 }
