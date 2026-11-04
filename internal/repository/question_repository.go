@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/sashank33v/recallengine/internal/model"
@@ -17,29 +19,27 @@ func NewQuestionRepository(db *sql.DB) *QuestionRepository {
 	return &QuestionRepository{db: db}
 }
 
-func (r *QuestionRepository) Create(ctx context.Context, userID int64, questionText, answerText string) (*model.Question, error) {
+func (r *QuestionRepository) Create(ctx context.Context, userID int64, topicName, questionText, answerText string) (*model.Question, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	query := `
-		INSERT INTO questions (user_id, question_text, answer_text)
-		VALUES ($1, $2, $3)
-		RETURNING id, user_id, question_text, answer_text, source, status, created_at`
-
-	q := &model.Question{}
-	err = tx.QueryRowContext(ctx, query, userID, questionText, answerText).Scan(
-		&q.ID, &q.UserID, &q.QuestionText, &q.AnswerText, &q.Source, &q.Status, &q.CreatedAt,
-	)
+	var topicID int
+	query1 := `INSERT INTO topics (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`
+	err = tx.QueryRowContext(ctx, query1, userID, topicName).Scan(&topicID)
 	if err != nil {
 		return nil, err
 	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO review_state (question_id, user_id) VALUES ($1, $2)`,
-		q.ID, userID)
+	query2 := `INSERT INTO questions (user_id, topic_id, question_text, answer_text) VALUES ($1, $2, $3, $4) RETURNING id, user_id, question_text, answer_text, source, status, created_at`
+	q := &model.Question{}
+	err = tx.QueryRowContext(ctx, query2, userID, topicID, questionText, answerText).Scan(&q.ID, &q.UserID, &q.QuestionText, &q.AnswerText, &q.Source, &q.Status, &q.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	query3 := `INSERT INTO review_state (question_id, user_id) VALUES ($1, $2)`
+	_, err = tx.ExecContext(ctx, query3, q.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +92,7 @@ func (r *QuestionRepository) RecordAnswer(ctx context.Context, userID, questionI
 	}
 
 	newState, dueAt := scheduler.Next(state, quality, now)
-	query2 := `UPDATE review_state
-		 SET ease_factor = $1, interval_days = $2, repetitions = $3, due_at = $4, last_reviewed_at = $5
-		 WHERE question_id = $6`
+	query2 := `UPDATE review_state SET ease_factor = $1, interval_days = $2, repetitions = $3, due_at = $4, last_reviewed_at = $5 WHERE question_id = $6`
 	_, err = tx.ExecContext(ctx, query2, newState.EaseFactor, newState.IntervalDays, newState.Repetitions, dueAt, now, questionID)
 
 	if err != nil {
@@ -106,6 +104,20 @@ func (r *QuestionRepository) RecordAnswer(ctx context.Context, userID, questionI
 		return scheduler.State{}, time.Time{}, err
 	}
 
+	payload, err := json.Marshal(map[string]any{
+		"user_id":     userID,
+		"question_id": questionID,
+		"quality":     quality,
+		"answered_at": now,
+	})
+	if err != nil {
+		return scheduler.State{}, time.Time{}, err
+	}
+	query4 := `INSERT INTO outbox_events (topic, event_key, event_type, payload) VALUES ($1, $2, $3, $4)`
+	_, err = tx.ExecContext(ctx, query4, "answer.events", strconv.FormatInt(userID, 10), "AnswerSubmitted", string(payload))
+	if err != nil {
+		return scheduler.State{}, time.Time{}, err
+	}
 	err = tx.Commit()
 	if err != nil {
 		return scheduler.State{}, time.Time{}, err

@@ -36,7 +36,7 @@ func (h *QuestionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q, err := h.questionService.Create(r.Context(), userID, req.Question, req.Answer)
+	q, err := h.questionService.Create(r.Context(), userID, req.Question, req.Answer, req.Topic)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidQuestion) {
 			writeError(w, http.StatusBadRequest, err.Error())

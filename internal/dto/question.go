@@ -5,6 +5,7 @@ import "time"
 type CreateQuestionRequest struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
+	Topic    string `json:"topic"`
 }
 
 type QuestionResponse struct {

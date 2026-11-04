@@ -9,7 +9,7 @@ import (
 	"github.com/sashank33v/recallengine/internal/repository"
 )
 
-var ErrInvalidQuestion = errors.New("question is required (max 1000 characters) and answer is required (max 5000 characters)")
+var ErrInvalidQuestion = errors.New("question is required (max 1000 characters) and answer is required (max 5000 characters), topic max 100 characters")
 var ErrInvalidStatus = errors.New("status must be draft, approved or rejected")
 
 type QuestionService struct {
@@ -20,14 +20,18 @@ func NewQuestionService(questionRepo *repository.QuestionRepository) *QuestionSe
 	return &QuestionService{questionRepo: questionRepo}
 }
 
-func (s *QuestionService) Create(ctx context.Context, userID int64, question, answer string) (*model.Question, error) {
+func (s *QuestionService) Create(ctx context.Context, userID int64, question, answer, topic string) (*model.Question, error) {
 	question = strings.TrimSpace(question)
 	answer = strings.TrimSpace(answer)
+	topic = strings.TrimSpace(topic)
 
+	if topic == "" {
+		topic = "General"
+	}
 	if question == "" || len(question) > 1000 || answer == "" || len(answer) > 5000 {
 		return nil, ErrInvalidQuestion
 	}
-	return s.questionRepo.Create(ctx, userID, question, answer)
+	return s.questionRepo.Create(ctx, userID, topic, question, answer)
 }
 func (s *QuestionService) List(ctx context.Context, userID int64, status string, limit, offset int) ([]model.Question, error) {
 	if status != "" && status != "draft" && status != "approved" && status != "rejected" {

@@ -8,14 +8,15 @@ import (
 )
 
 type Config struct {
-	AppName    string
-	Port       string
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
+	AppName     string
+	Port        string
+	DBHost      string
+	DBPort      string
+	DBUser      string
+	DBPassword  string
+	DBName      string
+	DBSSLMode   string
+	KafkaBroker string
 }
 
 func Load() (*Config, error) {
@@ -25,14 +26,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		AppName:    os.Getenv("APP_NAME"),
-		Port:       os.Getenv("PORT"),
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     os.Getenv("DB_PORT"),
-		DBUser:     os.Getenv("DB_USER"),
-		DBPassword: os.Getenv("DB_PASSWORD"),
-		DBName:     os.Getenv("DB_NAME"),
-		DBSSLMode:  os.Getenv("DB_SSLMODE"),
+		AppName:     os.Getenv("APP_NAME"),
+		Port:        os.Getenv("PORT"),
+		DBHost:      os.Getenv("DB_HOST"),
+		DBPort:      os.Getenv("DB_PORT"),
+		DBUser:      os.Getenv("DB_USER"),
+		DBPassword:  os.Getenv("DB_PASSWORD"),
+		DBName:      os.Getenv("DB_NAME"),
+		DBSSLMode:   os.Getenv("DB_SSLMODE"),
+		KafkaBroker: os.Getenv("KAFKA_BROKER"),
 	}
 	return cfg, nil
 }
