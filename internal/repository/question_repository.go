@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
+	"github.com/sashank33v/recallengine/internal/apperror"
 	"github.com/sashank33v/recallengine/internal/model"
 	"github.com/sashank33v/recallengine/internal/scheduler"
 )
@@ -149,4 +151,64 @@ func (r *QuestionRepository) ListByUser(ctx context.Context, userID int64, statu
 		questions = append(questions, q)
 	}
 	return questions, rows.Err()
+}
+func (r *QuestionRepository) Approve(ctx context.Context, userID, questionID int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	query1 := `UPDATE questions SET status = 'approved' WHERE id = $1 AND user_id = $2 AND status = 'draft'`
+	result, err := tx.ExecContext(ctx, query1, questionID, userID)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return apperror.ErrDraftNotFound
+	}
+	query2 := `INSERT INTO review_state (question_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	_, err = tx.ExecContext(ctx, query2, questionID, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+func (r *QuestionRepository) Reject(ctx context.Context, userID, questionID int64) error {
+	query1 := `UPDATE questions SET status = 'rejected' WHERE id = $1 AND user_id = $2 AND status = 'draft'`
+
+	result, err := r.db.ExecContext(ctx, query1, questionID, userID)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return apperror.ErrDraftNotFound
+	}
+	return nil
+}
+func (r *QuestionRepository) UpdateDraft(ctx context.Context, userID, questionID int64, questionText, answerText string) (*model.Question, error) {
+	query := `
+		UPDATE questions SET question_text = $1, answer_text = $2
+		WHERE id = $3 AND user_id = $4 AND status = 'draft'
+		RETURNING id, user_id, question_text, answer_text, source, status, created_at`
+
+	q := &model.Question{}
+	err := r.db.QueryRowContext(ctx, query, questionText, answerText, questionID, userID).Scan(
+		&q.ID, &q.UserID, &q.QuestionText, &q.AnswerText, &q.Source, &q.Status, &q.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.ErrDraftNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
 }

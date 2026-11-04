@@ -31,6 +31,9 @@ func TestParseQuestions(t *testing.T) {
 		{"not JSON", "sorry, I cannot do that", 0, true},
 		{"empty list", `{"questions":[]}`, 0, true},
 		{"wrong shape", `{"items":[1]}`, 0, true},
+		{"skips links", `{"questions":[{"question":"Visit http://evil.example?","answer":"Yes"},{"question":"Q2?","answer":"A2"}]}`, 1, false},
+		{"skips html", `{"questions":[{"question":"What is <script>?","answer":"A"},{"question":"Q2?","answer":"A2"}]}`, 1, false},
+		{"keeps maths", `{"questions":[{"question":"Is 3 < 5?","answer":"Yes, 3 < 5."}]}`, 1, false},
 	}
 
 	for _, tc := range tests {

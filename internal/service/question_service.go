@@ -45,3 +45,19 @@ func (s *QuestionService) List(ctx context.Context, userID int64, status string,
 	}
 	return s.questionRepo.ListByUser(ctx, userID, status, limit, offset)
 }
+func (s *QuestionService) Approve(ctx context.Context, userID, questionID int64) error {
+	return s.questionRepo.Approve(ctx, userID, questionID)
+}
+
+func (s *QuestionService) Reject(ctx context.Context, userID, questionID int64) error {
+	return s.questionRepo.Reject(ctx, userID, questionID)
+}
+func (s *QuestionService) UpdateDraft(ctx context.Context, userID, questionID int64, question, answer string) (*model.Question, error) {
+	question = strings.TrimSpace(question)
+	answer = strings.TrimSpace(answer)
+
+	if question == "" || len(question) > 1000 || answer == "" || len(answer) > 5000 {
+		return nil, ErrInvalidQuestion
+	}
+	return s.questionRepo.UpdateDraft(ctx, userID, questionID, question, answer)
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/sashank33v/recallengine/internal/platform/ai"
@@ -16,6 +17,9 @@ const (
 	maxGeneratedQuestions = 8
 	maxNoteChars          = 12000
 )
+
+var noteTagPattern = regexp.MustCompile(`(?i)</?\s*note\s*>`)
+var unsafeTextPattern = regexp.MustCompile(`(?i)https?://|www\.|<[a-z/!]`)
 
 const generatorSystemPrompt = `You create study questions from a student's notes.
 
@@ -51,7 +55,8 @@ func (g *QuestionGenerator) Generate(ctx context.Context, title, content string)
 		content = string(runes[:maxNoteChars])
 	}
 
-	content = strings.ReplaceAll(content, "</note>", "")
+	content = noteTagPattern.ReplaceAllString(content, "")
+	title = strings.ReplaceAll(title, "\n", " ")
 
 	userMessage := fmt.Sprintf("Note title: %s\n<note>\n%s\n</note>", title, content)
 
@@ -84,6 +89,9 @@ func parseQuestions(reply string) ([]GeneratedQuestion, error) {
 		answer := strings.TrimSpace(q.Answer)
 
 		if question == "" || answer == "" || len(question) > 1000 || len(answer) > 5000 {
+			continue
+		}
+		if unsafeTextPattern.MatchString(question) || unsafeTextPattern.MatchString(answer) {
 			continue
 		}
 

@@ -5,11 +5,14 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/sashank33v/recallengine/internal/chunker"
 	"github.com/sashank33v/recallengine/internal/model"
 	"github.com/sashank33v/recallengine/internal/repository"
 )
 
 var ErrInvalidNote = errors.New("title is required (max 200 characters) and content is required (max 50000 characters)")
+
+const chunkSize = 800
 
 type NoteService struct {
 	noteRepo *repository.NoteRepository
@@ -26,7 +29,8 @@ func (s *NoteService) Create(ctx context.Context, userID int64, title, content s
 	if title == "" || len(title) > 200 || content == "" || len(content) > 50000 {
 		return nil, ErrInvalidNote
 	}
-	return s.noteRepo.Create(ctx, userID, title, content)
+	chunks := chunker.Split(content, chunkSize)
+	return s.noteRepo.Create(ctx, userID, title, content, chunks)
 }
 
 func (s *NoteService) List(ctx context.Context, userID int64) ([]model.Note, error) {

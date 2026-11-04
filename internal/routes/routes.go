@@ -8,7 +8,7 @@ import (
 	"github.com/sashank33v/recallengine/internal/service"
 )
 
-func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationHandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
+func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
 	mux := http.NewServeMux()
 	auth := middleware.Auth(authservice)
 	mux.HandleFunc("GET /healthz", handler.HealthHandler)
@@ -23,6 +23,11 @@ func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandle
 	mux.Handle("POST /study/answer", auth(http.HandlerFunc(studyhandler.Answer)))
 	mux.Handle("GET /questions", auth(http.HandlerFunc(questionhandler.List)))
 	mux.Handle("GET /mastery", auth(http.HandlerFunc(masteryhandler.List)))
-	mux.Handle("POST /notes/{id}/generate", auth(http.HandlerFunc(generationHandler.Generate)))
+	mux.Handle("POST /notes/{id}/generate", auth(http.HandlerFunc(generationhandler.Generate)))
+	mux.Handle("POST /questions/{id}/approve", auth(http.HandlerFunc(questionhandler.Approve)))
+	mux.Handle("POST /questions/{id}/reject", auth(http.HandlerFunc(questionhandler.Reject)))
+	mux.Handle("PUT /questions/{id}", auth(http.HandlerFunc(questionhandler.Update)))
+	mux.Handle("GET /search", auth(http.HandlerFunc(searchhandler.Search)))
+	mux.Handle("POST /ask", auth(http.HandlerFunc(tutorhandler.Ask)))
 	return mux
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sashank33v/recallengine/internal/config"
 	"github.com/sashank33v/recallengine/internal/handler"
+	"github.com/sashank33v/recallengine/internal/platform/ai"
 	"github.com/sashank33v/recallengine/internal/platform/postgres"
 	"github.com/sashank33v/recallengine/internal/repository"
 	"github.com/sashank33v/recallengine/internal/routes"
@@ -38,19 +39,25 @@ func main() {
 	questionRepo := repository.NewQuestionRepository(db)
 	masteryRepo := repository.NewMasteryRepository(db)
 	generationRepo := repository.NewGenerationRepository(db)
+	chunkRepo := repository.NewChunkRepository(db)
 	authService := service.NewAuthService(userRepo, sessionRepo)
 	noteService := service.NewNoteService(noteRepo)
 	questionService := service.NewQuestionService(questionRepo)
 	studyService := service.NewStudyService(questionRepo)
 	masteryService := service.NewMasterService(masteryRepo)
 	generationService := service.NewGenerationService(generationRepo)
+	searchService := service.NewSearchService(chunkRepo)
+	aiClient := ai.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
+	tutorService := service.NewTutorService(searchService, aiClient)
 	authHandler := handler.NewAuthHandler(authService)
 	noteHandler := handler.NewNoteHandler(noteService)
 	questionHandler := handler.NewQuestionHandler(questionService)
 	studyHandler := handler.NewStudyHandler(studyService)
 	masteryHandler := handler.NewMasterHandler(masteryService)
 	generationHandler := handler.NewGenerationHandler(generationService)
-	router := routes.NewRouter(authHandler, noteHandler, questionHandler, studyHandler, masteryHandler, generationHandler, authService)
+	searchHandler := handler.NewSearchHandler(searchService)
+	tutorHandler := handler.NewTutorHandler(tutorService)
+	router := routes.NewRouter(authHandler, noteHandler, questionHandler, searchHandler, tutorHandler, studyHandler, masteryHandler, generationHandler, authService)
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: router,
