@@ -17,6 +17,8 @@ type Config struct {
 	DBName      string
 	DBSSLMode   string
 	KafkaBroker string
+	GroqAPIKey  string
+	GroqModel   string
 }
 
 func Load() (*Config, error) {
@@ -35,6 +37,8 @@ func Load() (*Config, error) {
 		DBName:      os.Getenv("DB_NAME"),
 		DBSSLMode:   os.Getenv("DB_SSLMODE"),
 		KafkaBroker: os.Getenv("KAFKA_BROKER"),
+		GroqAPIKey:  os.Getenv("GROQ_API_KEY"),
+		GroqModel:   os.Getenv("GROQ_MODEL"),
 	}
 	return cfg, nil
 }
