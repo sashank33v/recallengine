@@ -23,7 +23,7 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Failed to load configuration: %w", err)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 	fmt.Printf("Starting %s....\n", cfg.AppName)
 

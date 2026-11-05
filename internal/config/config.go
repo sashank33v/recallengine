@@ -25,7 +25,8 @@ func Load() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Failed to load .env file", err)
-		return nil, err
+		//log.Println(".env file not found, using environment variables")
+		//return nil, err
 	}
 	cfg := &Config{
 		AppName:     os.Getenv("APP_NAME"),
