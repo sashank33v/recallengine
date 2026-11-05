@@ -7,6 +7,7 @@ import (
 	"github.com/sashank33v/recallengine/internal/handler"
 	"github.com/sashank33v/recallengine/internal/middleware"
 	"github.com/sashank33v/recallengine/internal/service"
+	"github.com/sashank33v/recallengine/web"
 )
 
 func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, coachhandler *handler.CoachHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, conversationhandler *handler.ConversationHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
@@ -35,5 +36,8 @@ func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandle
 	mux.Handle("GET /conversations", auth(http.HandlerFunc(conversationhandler.List)))
 	mux.Handle("GET /conversations/{id}/messages", auth(http.HandlerFunc(conversationhandler.Messages)))
 	mux.Handle("POST /coach", auth(ratelimit.Limit(http.HandlerFunc(coachhandler.Ask))))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, web.FS, "index.html")
+	})
 	return mux
 }

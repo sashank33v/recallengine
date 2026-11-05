@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RecallEngine</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    input { padding: 0.5rem; margin: 0.25rem 0; }
+    button { padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0.25rem 0; }
+    #question { width: 100%; box-sizing: border-box; }
+    #answer { white-space: pre-wrap; margin-top: 1rem; padding: 1rem; background: #f4f4f4; border-radius: 6px; min-height: 2rem; }
+    .source { font-size: 0.9rem; color: #555; margin-top: 0.5rem; }
+    #loginMsg { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>RecallEngine</h1>
+
+  <section id="login">
+    <div><input id="email" type="email" placeholder="Email"></div>
+    <div><input id="password" type="password" placeholder="Password (at least 8 characters)"></div>
+    <button id="loginBtn">Log in</button>
+    <button id="signupBtn">Sign up</button>
+    <p id="loginMsg"></p>
+  </section>
+
+  <section id="app" hidden>
+    <button id="logoutBtn">Log out</button>
+    <h2>Ask your notes</h2>
+    <input id="question" placeholder="Ask a question about your notes">
+    <button id="askBtn">Ask</button>
+    <button id="newChatBtn">New chat</button>
+    <div id="answer"></div>
+    <div id="sources"></div>
+  </section>
+
+  <script>
+    let token = sessionStorage.getItem("token");
+    let conversationId = 0;
+
+    const $ = (id) => document.getElementById(id);
+
+    function showPage() {
+      $("login").hidden = !!token;
+      $("app").hidden = !token;
+    }
+
+    function logout() {
+      token = null;
+      conversationId = 0;
+      sessionStorage.removeItem("token");
+      showPage();
+    }
+
+    async function sendCredentials(path) {
+      return fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: $("email").value, password: $("password").value }),
+      });
+    }
+
+    async function login() {
+      const res = await sendCredentials("/login");
+      const data = await res.json();
+      if (!res.ok) {
+        $("loginMsg").textContent = data.error || "Login failed";
+        return;
+      }
+      token = data.token;
+      sessionStorage.setItem("token", token);
+      $("loginMsg").textContent = "";
+      showPage();
+    }
+
+    async function signup() {
+      const res = await sendCredentials("/signup");
+      const data = await res.json();
+      if (!res.ok) {
+        $("loginMsg").textContent = data.error || "Signup failed";
+        return;
+      }
+      await login();
+    }
+
+    function showSources(sources) {
+      $("sources").textContent = "";
+      sources.forEach((s, i) => {
+        const div = document.createElement("div");
+        div.className = "source";
+        div.textContent = "[" + (i + 1) + "] " + s.note_title + ": " + s.content;
+        $("sources").appendChild(div);
+      });
+    }
+
+    function handleEvent(text) {
+      let name = "";
+      let data = "";
+      for (const line of text.split("\n")) {
+        if (line.startsWith("event: ")) name = line.slice(7);
+        if (line.startsWith("data: ")) data = line.slice(6);
+      }
+      if (!name || !data) return;
+
+      const value = JSON.parse(data);
+      if (name === "conversation") conversationId = value.id;
+      if (name === "sources") showSources(value);
+      if (name === "token") $("answer").textContent += value;
+      if (name === "replace") $("answer").textContent = value;
+      if (name === "error") $("answer").textContent = value;
+    }
+
+    async function ask() {
+      const question = $("question").value.trim();
+      if (!question) return;
+
+      $("answer").textContent = "";
+      $("sources").textContent = "";
+
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ question: question, conversation_id: conversationId }),
+      });
+
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json();
+        $("answer").textContent = data.error || "Something went wrong";
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop();
+        for (const text of events) handleEvent(text);
+      }
+    }
+
+    $("loginBtn").addEventListener("click", login);
+    $("signupBtn").addEventListener("click", signup);
+    $("logoutBtn").addEventListener("click", logout);
+    $("askBtn").addEventListener("click", ask);
+    $("newChatBtn").addEventListener("click", () => {
+      conversationId = 0;
+      $("answer").textContent = "";
+      $("sources").textContent = "";
+    });
+    $("question").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") ask();
+    });
+
+    showPage();
+  </script>
+</body>
+</html>
