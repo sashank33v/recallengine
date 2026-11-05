@@ -2,15 +2,17 @@ package routes
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/sashank33v/recallengine/internal/handler"
 	"github.com/sashank33v/recallengine/internal/middleware"
 	"github.com/sashank33v/recallengine/internal/service"
 )
 
-func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
+func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, coachhandler *handler.CoachHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, conversationhandler *handler.ConversationHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
 	mux := http.NewServeMux()
 	auth := middleware.Auth(authservice)
+	ratelimit := middleware.NewRateLimiter(10, time.Minute)
 	mux.HandleFunc("GET /healthz", handler.HealthHandler)
 	mux.HandleFunc("POST /signup", Authhandler.Signup)
 	mux.HandleFunc("POST /login", Authhandler.Login)
@@ -23,11 +25,15 @@ func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandle
 	mux.Handle("POST /study/answer", auth(http.HandlerFunc(studyhandler.Answer)))
 	mux.Handle("GET /questions", auth(http.HandlerFunc(questionhandler.List)))
 	mux.Handle("GET /mastery", auth(http.HandlerFunc(masteryhandler.List)))
-	mux.Handle("POST /notes/{id}/generate", auth(http.HandlerFunc(generationhandler.Generate)))
+	mux.Handle("POST /notes/{id}/generate", auth(ratelimit.Limit(http.HandlerFunc(generationhandler.Generate))))
 	mux.Handle("POST /questions/{id}/approve", auth(http.HandlerFunc(questionhandler.Approve)))
 	mux.Handle("POST /questions/{id}/reject", auth(http.HandlerFunc(questionhandler.Reject)))
 	mux.Handle("PUT /questions/{id}", auth(http.HandlerFunc(questionhandler.Update)))
 	mux.Handle("GET /search", auth(http.HandlerFunc(searchhandler.Search)))
-	mux.Handle("POST /ask", auth(http.HandlerFunc(tutorhandler.Ask)))
+	mux.Handle("POST /ask", auth(ratelimit.Limit(http.HandlerFunc(tutorhandler.Ask))))
+	mux.Handle("POST /chat", auth(ratelimit.Limit(http.HandlerFunc(tutorhandler.Chat))))
+	mux.Handle("GET /conversations", auth(http.HandlerFunc(conversationhandler.List)))
+	mux.Handle("GET /conversations/{id}/messages", auth(http.HandlerFunc(conversationhandler.Messages)))
+	mux.Handle("POST /coach", auth(ratelimit.Limit(http.HandlerFunc(coachhandler.Ask))))
 	return mux
 }

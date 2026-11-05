@@ -36,6 +36,10 @@ type TutorService struct {
 	search *SearchService
 	client *ai.Client
 }
+type StreamResult struct {
+	Answer   string
+	Replaced bool
+}
 
 func NewTutorService(search *SearchService, client *ai.Client) *TutorService {
 	return &TutorService{search: search, client: client}
@@ -80,4 +84,40 @@ func buildTutorMessages(question string, passages []model.Chunk) (string, string
 
 func cleanForPrompt(text string) string {
 	return passagesTagPattern.ReplaceAllString(text, "")
+}
+func (s *TutorService) AskStream(ctx context.Context, userID int64, question string, onSources func([]model.Chunk) error, onToken func(string) error) (*StreamResult, error) {
+	passages, err := s.search.FindPassages(ctx, userID, question, 4)
+	if err != nil {
+		return nil, err
+	}
+	if len(passages) == 0 {
+		err = onToken(noAnswerMessage)
+		if err != nil {
+			return nil, err
+		}
+		return &StreamResult{Answer: noAnswerMessage}, nil
+	}
+
+	err = onSources(passages)
+	if err != nil {
+		return nil, err
+	}
+
+	system, user := buildTutorMessages(question, passages)
+
+	var full strings.Builder
+	err = s.client.ChatStream(ctx, system, user, func(token string) error {
+		full.WriteString(token)
+		return onToken(token)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	answer := strings.TrimSpace(full.String())
+	if answer == "" || unsafeTextPattern.MatchString(answer) {
+		return &StreamResult{Answer: unsafeMessage, Replaced: true}, nil
+	}
+	return &StreamResult{Answer: answer}, nil
+
 }

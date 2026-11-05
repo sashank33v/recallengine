@@ -12,6 +12,7 @@ import (
 
 	"github.com/sashank33v/recallengine/internal/config"
 	"github.com/sashank33v/recallengine/internal/handler"
+	"github.com/sashank33v/recallengine/internal/middleware"
 	"github.com/sashank33v/recallengine/internal/platform/ai"
 	"github.com/sashank33v/recallengine/internal/platform/postgres"
 	"github.com/sashank33v/recallengine/internal/repository"
@@ -40,6 +41,7 @@ func main() {
 	masteryRepo := repository.NewMasteryRepository(db)
 	generationRepo := repository.NewGenerationRepository(db)
 	chunkRepo := repository.NewChunkRepository(db)
+	conversationRepo := repository.NewConversationRepository(db)
 	authService := service.NewAuthService(userRepo, sessionRepo)
 	noteService := service.NewNoteService(noteRepo)
 	questionService := service.NewQuestionService(questionRepo)
@@ -49,6 +51,8 @@ func main() {
 	searchService := service.NewSearchService(chunkRepo)
 	aiClient := ai.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	tutorService := service.NewTutorService(searchService, aiClient)
+	conversationService := service.NewConversationService(conversationRepo)
+	coachService := service.NewCoachService(aiClient, questionRepo, masteryRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	noteHandler := handler.NewNoteHandler(noteService)
 	questionHandler := handler.NewQuestionHandler(questionService)
@@ -56,11 +60,14 @@ func main() {
 	masteryHandler := handler.NewMasterHandler(masteryService)
 	generationHandler := handler.NewGenerationHandler(generationService)
 	searchHandler := handler.NewSearchHandler(searchService)
-	tutorHandler := handler.NewTutorHandler(tutorService)
-	router := routes.NewRouter(authHandler, noteHandler, questionHandler, searchHandler, tutorHandler, studyHandler, masteryHandler, generationHandler, authService)
+	tutorHandler := handler.NewTutorHandler(tutorService, conversationService)
+	conversationHandler := handler.NewConversationHandler(conversationService)
+	coachHandler := handler.NewCoachHandler(coachService)
+	router := routes.NewRouter(authHandler, noteHandler, questionHandler, coachHandler, searchHandler, tutorHandler, conversationHandler, studyHandler, masteryHandler, generationHandler, authService)
 	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
+		Addr:              ":" + cfg.Port,
+		Handler:           middleware.Logging(middleware.Recover(router)),
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
 		fmt.Printf("Server running on http://localhost:%s\n", cfg.Port)
