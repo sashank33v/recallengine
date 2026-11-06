@@ -71,8 +71,8 @@ func main() {
 	}
 	go func() {
 		fmt.Printf("Server running on http://localhost:%s\n", cfg.Port)
-		err = http.ListenAndServe(":"+cfg.Port, router)
-		if err != nil {
+		err := server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatal("server error:", err)
 		}
 	}()
