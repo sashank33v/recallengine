@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,6 +33,7 @@ func main() {
 		log.Fatal("Failed to Connect database:", err)
 	}
 	defer db.Close()
+	expvar.Publish("db", expvar.Func(func() any { return db.Stats() }))
 
 	fmt.Println("database connected succesfully!")
 	userRepo := repository.NewUserRepository(db)
@@ -53,6 +55,7 @@ func main() {
 	tutorService := service.NewTutorService(searchService, aiClient)
 	conversationService := service.NewConversationService(conversationRepo)
 	coachService := service.NewCoachService(aiClient, questionRepo, masteryRepo)
+	explainService := service.NewExplainService(questionRepo, searchService, aiClient)
 	authHandler := handler.NewAuthHandler(authService)
 	noteHandler := handler.NewNoteHandler(noteService)
 	questionHandler := handler.NewQuestionHandler(questionService)
@@ -63,10 +66,14 @@ func main() {
 	tutorHandler := handler.NewTutorHandler(tutorService, conversationService)
 	conversationHandler := handler.NewConversationHandler(conversationService)
 	coachHandler := handler.NewCoachHandler(coachService)
-	router := routes.NewRouter(authHandler, noteHandler, questionHandler, coachHandler, searchHandler, tutorHandler, conversationHandler, studyHandler, masteryHandler, generationHandler, authService)
+	explainHandler := handler.NewExplainHandler(explainService)
+	router := routes.NewRouter(authHandler, noteHandler, questionHandler, coachHandler, searchHandler, tutorHandler, conversationHandler, studyHandler, masteryHandler, generationHandler, explainHandler, authService)
+	root := http.NewServeMux()
+	root.Handle("GET /metrics", handler.Metrics(cfg.MetricsToken))
+	root.Handle("/", router)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           middleware.Logging(middleware.Recover(router)),
+		Handler:           middleware.Logging(middleware.Recover(root)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

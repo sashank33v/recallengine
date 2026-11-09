@@ -61,6 +61,8 @@ func main() {
 	generationDLQ := worker.NewDeadLetterPublisher(producer, "generation.jobs.dlq")
 	go generationConsumer.Run(ctx, generationWorker.Handle, generationDLQ.Send)
 	log.Println("worker started...")
+	go worker.NewSessionCleaner(db).Run(ctx)
+	go worker.NewJobRecovery(db).Run(ctx)
 	publisher.Run(ctx)
 	log.Println("worker stopped...")
 }

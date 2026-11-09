@@ -103,14 +103,24 @@ func (g *GenerationWorker) generate(ctx context.Context, jobID, userID, noteID i
 	if err != nil {
 		return 0, err
 	}
+	created := 0
 
 	for _, q := range questions {
-		query3 := `INSERT INTO questions (user_id, note_id, topic_id, question_text, answer_text, source, status)
-			 VALUES ($1, $2, $3, $4, $5, 'ai', 'draft')`
-		_, err = tx.ExecContext(ctx, query3, userID, noteID, topicID, q.Question, q.Answer)
+		var exists bool
+		query3 := `SELECT EXISTS (SELECT 1 FROM questions WHERE user_id = $1 AND lower(btrim(regexp_replace(question_text, '[^[:alnum:]]+', ' ', 'g'))) = lower(btrim(regexp_replace($2::text, '[^[:alnum:]]+', ' ', 'g'))))`
+		err = tx.QueryRowContext(ctx, query3, userID, q.Question).Scan(&exists)
 		if err != nil {
 			return 0, err
 		}
+		if exists {
+			continue
+		}
+		query4 := `INSERT INTO questions (user_id, note_id, topic_id, question_text, answer_text, source, status) VALUES ($1, $2, $3, $4, $5, 'ai', 'draft')`
+		_, err := tx.ExecContext(ctx, query4, userID, noteID, topicID, q.Question, q.Answer)
+		if err != nil {
+			return 0, err
+		}
+		created++
 	}
 
 	query4 := `UPDATE generation_jobs SET status = 'done', questions_created = $1, updated_at = now() WHERE id = $2`
@@ -124,7 +134,7 @@ func (g *GenerationWorker) generate(ctx context.Context, jobID, userID, noteID i
 	if err != nil {
 		return 0, err
 	}
-	return len(questions), nil
+	return created, nil
 }
 
 func (g *GenerationWorker) setStatus(ctx context.Context, jobID int64, status, errMsg string) {

@@ -10,7 +10,7 @@ import (
 	"github.com/sashank33v/recallengine/web"
 )
 
-func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, coachhandler *handler.CoachHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, conversationhandler *handler.ConversationHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, authservice *service.AuthService) http.Handler {
+func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandler, questionhandler *handler.QuestionHandler, coachhandler *handler.CoachHandler, searchhandler *handler.SearchHandler, tutorhandler *handler.TutorHandler, conversationhandler *handler.ConversationHandler, studyhandler *handler.StudyHandler, masteryhandler *handler.MasteryHandler, generationhandler *handler.GenerationHandler, explainhandler *handler.ExplainHandler, authservice *service.AuthService) http.Handler {
 	mux := http.NewServeMux()
 	auth := middleware.Auth(authservice)
 	ratelimit := middleware.NewRateLimiter(10, time.Minute)
@@ -31,11 +31,13 @@ func NewRouter(Authhandler *handler.Authhandler, notehandler *handler.NoteHandle
 	mux.Handle("POST /questions/{id}/reject", auth(http.HandlerFunc(questionhandler.Reject)))
 	mux.Handle("PUT /questions/{id}", auth(http.HandlerFunc(questionhandler.Update)))
 	mux.Handle("GET /search", auth(http.HandlerFunc(searchhandler.Search)))
+	mux.Handle("POST /logout", auth(http.HandlerFunc(Authhandler.Logout)))
 	mux.Handle("POST /ask", auth(ratelimit.Limit(http.HandlerFunc(tutorhandler.Ask))))
 	mux.Handle("POST /chat", auth(ratelimit.Limit(http.HandlerFunc(tutorhandler.Chat))))
 	mux.Handle("GET /conversations", auth(http.HandlerFunc(conversationhandler.List)))
 	mux.Handle("GET /conversations/{id}/messages", auth(http.HandlerFunc(conversationhandler.Messages)))
 	mux.Handle("POST /coach", auth(ratelimit.Limit(http.HandlerFunc(coachhandler.Ask))))
+	mux.Handle("POST /study/explain", auth(ratelimit.Limit(http.HandlerFunc(explainhandler.Explain))))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, web.FS, "index.html")
 	})

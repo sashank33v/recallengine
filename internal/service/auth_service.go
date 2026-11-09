@@ -95,3 +95,7 @@ func hashToken(token string) string {
 func (s *AuthService) Authenticate(ctx context.Context, token string) (int64, error) {
 	return s.sessionRepo.GetUserID(ctx, hashToken(token))
 }
+
+func (s *AuthService) Logout(ctx context.Context, token string) error {
+	return s.sessionRepo.Delete(ctx, hashToken(token))
+}

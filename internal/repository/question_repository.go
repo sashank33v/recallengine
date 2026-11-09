@@ -54,13 +54,7 @@ func (r *QuestionRepository) Create(ctx context.Context, userID int64, topicName
 }
 
 func (r *QuestionRepository) ListDue(ctx context.Context, userID int64, limit int) ([]model.Question, error) {
-	query := `SELECT q.id, q.user_id, q.question_text, q.answer_text, q.source, q.status, q.created_at
-		FROM questions q
-		JOIN review_state r ON r.question_id = q.id
-		WHERE q.user_id = $1 AND q.status = 'approved' AND r.due_at <= now()
-		ORDER BY r.due_at ASC
-		LIMIT $2`
-
+	query := `SELECT q.id, q.user_id, q.question_text, q.answer_text, q.source, q.status, q.created_at FROM questions q JOIN review_state r ON r.question_id = q.id LEFT JOIN topic_mastery m ON m.user_id = q.user_id AND m.topic_id = q.topic_id WHERE q.user_id = $1 AND q.status = 'approved' AND r.due_at <= now() ORDER BY COALESCE(m.correct_answers::float8 / NULLIF(m.total_answers, 0), 0.5) ASC, r.due_at ASC LIMIT $2`
 	rows, err := r.db.QueryContext(ctx, query, userID, limit)
 	if err != nil {
 		return nil, err
@@ -211,4 +205,10 @@ func (r *QuestionRepository) UpdateDraft(ctx context.Context, userID, questionID
 		return nil, err
 	}
 	return q, nil
+}
+func (r *QuestionRepository) GetTexts(ctx context.Context, userID, questionID int64) (string, string, error) {
+	var question, answer string
+	query := `SELECT question_text, answer_text FROM questions WHERE id = $1 AND user_id = $2`
+	err := r.db.QueryRowContext(ctx, query, questionID, userID).Scan(&question, &answer)
+	return question, answer, err
 }

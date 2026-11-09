@@ -5,13 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RecallEngine</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-    input { padding: 0.5rem; margin: 0.25rem 0; }
-    button { padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0.25rem 0; }
-    #question { width: 100%; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    input, textarea { padding: 0.5rem; margin: 0.25rem 0; font: inherit; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 6rem; }
+    button { padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0.25rem 0; cursor: pointer; }
+    nav { margin-bottom: 1rem; }
+    .card { padding: 0.75rem 1rem; margin: 0.5rem 0; background: #f4f4f4; border-radius: 6px; }
+    #question, #noteTitle { width: 100%; box-sizing: border-box; }
     #answer { white-space: pre-wrap; margin-top: 1rem; padding: 1rem; background: #f4f4f4; border-radius: 6px; min-height: 2rem; }
+    #studyQuestion { font-size: 1.2rem; margin-bottom: 0.5rem; }
+    #studyExplanation { white-space: pre-wrap; }
     .source { font-size: 0.9rem; color: #555; margin-top: 0.5rem; }
     #loginMsg { color: #b00020; }
+    #message { color: #1a4d8f; min-height: 1.5rem; }
   </style>
 </head>
 <body>
@@ -26,32 +32,132 @@
   </section>
 
   <section id="app" hidden>
-    <button id="logoutBtn">Log out</button>
-    <h2>Ask your notes</h2>
-    <input id="question" placeholder="Ask a question about your notes">
-    <button id="askBtn">Ask</button>
-    <button id="newChatBtn">New chat</button>
-    <div id="answer"></div>
-    <div id="sources"></div>
+    <nav>
+      <button data-tab="notes">Notes</button>
+      <button data-tab="review">Review drafts</button>
+      <button data-tab="study">Study</button>
+      <button data-tab="progress">Progress</button>
+      <button data-tab="chat">Ask your notes</button>
+      <button id="logoutBtn">Log out</button>
+    </nav>
+
+    <p id="message"></p>
+
+    <div id="tab-notes" class="tab">
+      <h2>Notes</h2>
+      <input id="noteTitle" placeholder="Title">
+      <textarea id="noteContent" placeholder="Paste your notes here"></textarea>
+      <button id="saveNoteBtn">Save note</button>
+      <div id="noteList"></div>
+    </div>
+
+    <div id="tab-review" class="tab" hidden>
+      <h2>Review drafts</h2>
+      <p>Questions written by the AI. Only approved questions enter your study schedule.</p>
+      <div id="drafts"></div>
+    </div>
+
+    <div id="tab-study" class="tab" hidden>
+      <h2>Study</h2>
+      <p id="studyEmpty" hidden>Nothing is due right now.</p>
+      <div id="studyCard" class="card" hidden>
+        <div id="studyQuestion"></div>
+        <button id="showAnswerBtn">Show answer</button>
+        <div id="studyAnswerBox" hidden>
+          <div id="studyAnswer"></div>
+          <button id="explainBtn">Explain from my notes</button>
+          <div id="studyExplanation" class="card" hidden></div>
+          <p>How well did you remember?</p>
+          <button data-q="0">0 Blackout</button>
+          <button data-q="1">1 Wrong</button>
+          <button data-q="2">2 Almost</button>
+          <button data-q="3">3 Hard</button>
+          <button data-q="4">4 Good</button>
+          <button data-q="5">5 Perfect</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-progress" class="tab" hidden>
+      <h2>Progress</h2>
+      <div id="mastery"></div>
+    </div>
+
+    <div id="tab-chat" class="tab" hidden>
+      <h2>Ask your notes</h2>
+      <input id="question" placeholder="Ask a question about your notes">
+      <button id="askBtn">Ask</button>
+      <button id="newChatBtn">New chat</button>
+      <div id="answer"></div>
+      <div id="sources"></div>
+    </div>
   </section>
 
   <script>
     let token = sessionStorage.getItem("token");
     let conversationId = 0;
+    let current = null;
 
     const $ = (id) => document.getElementById(id);
+
+    function say(text) {
+      $("message").textContent = text;
+    }
 
     function showPage() {
       $("login").hidden = !!token;
       $("app").hidden = !token;
+      if (token) openTab("notes");
     }
 
+    // logout forgets the token in this browser.
     function logout() {
       token = null;
       conversationId = 0;
       sessionStorage.removeItem("token");
       showPage();
     }
+
+    // signOut ends the session on the server first, then forgets the token.
+    async function signOut() {
+      try {
+        await fetch("/logout", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token },
+        });
+      } catch (e) {
+        // If the server cannot be reached, we still log out in this browser.
+      }
+      logout();
+    }
+
+    // api sends an authenticated request and returns the JSON answer.
+    async function api(path, method, body) {
+      const res = await fetch(path, {
+        method: method || "GET",
+        headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.status === 401) {
+        logout();
+        throw new Error("Please log in again");
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      return data;
+    }
+
+    function openTab(name) {
+      document.querySelectorAll(".tab").forEach((t) => { t.hidden = true; });
+      $("tab-" + name).hidden = false;
+      say("");
+      if (name === "notes") loadNotes();
+      if (name === "review") loadDrafts();
+      if (name === "study") loadStudy();
+      if (name === "progress") loadProgress();
+    }
+
+    // ---------- login ----------
 
     async function sendCredentials(path) {
       return fetch(path, {
@@ -83,6 +189,179 @@
       }
       await login();
     }
+
+    // ---------- notes ----------
+
+    async function loadNotes() {
+      try {
+        const notes = await api("/notes");
+        const list = $("noteList");
+        list.textContent = "";
+        if (notes.length === 0) {
+          list.textContent = "No notes yet.";
+          return;
+        }
+        for (const n of notes) {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const title = document.createElement("strong");
+          title.textContent = n.title;
+
+          const text = document.createElement("div");
+          text.textContent = n.content.length > 200 ? n.content.slice(0, 200) + "..." : n.content;
+
+          const button = document.createElement("button");
+          button.textContent = "Generate questions";
+          button.addEventListener("click", () => generate(n.id));
+
+          card.append(title, text, button);
+          list.appendChild(card);
+        }
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    async function saveNote() {
+      try {
+        await api("/notes", "POST", { title: $("noteTitle").value, content: $("noteContent").value });
+        $("noteTitle").value = "";
+        $("noteContent").value = "";
+        say("Note saved.");
+        loadNotes();
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    async function generate(noteId) {
+      try {
+        await api("/notes/" + noteId + "/generate", "POST");
+        say("Generating questions. Open 'Review drafts' in a few seconds.");
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    // ---------- review drafts ----------
+
+    async function loadDrafts() {
+      try {
+        const drafts = await api("/questions?status=draft&limit=50");
+        const box = $("drafts");
+        box.textContent = "";
+        if (drafts.length === 0) {
+          box.textContent = "No drafts to review.";
+          return;
+        }
+        for (const q of drafts) {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const question = document.createElement("div");
+          question.textContent = "Q: " + q.question;
+
+          const answer = document.createElement("div");
+          answer.textContent = "A: " + q.answer;
+
+          const approve = document.createElement("button");
+          approve.textContent = "Approve";
+          approve.addEventListener("click", () => review(q.id, "approve", card));
+
+          const reject = document.createElement("button");
+          reject.textContent = "Reject";
+          reject.addEventListener("click", () => review(q.id, "reject", card));
+
+          card.append(question, answer, approve, reject);
+          box.appendChild(card);
+        }
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    async function review(id, action, card) {
+      try {
+        await api("/questions/" + id + "/" + action, "POST");
+        card.remove();
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    // ---------- study ----------
+
+    async function loadStudy() {
+      try {
+        const due = await api("/study/due");
+        if (due.length === 0) {
+          current = null;
+          $("studyCard").hidden = true;
+          $("studyEmpty").hidden = false;
+          return;
+        }
+        current = due[0];
+        $("studyEmpty").hidden = true;
+        $("studyCard").hidden = false;
+        $("studyQuestion").textContent = current.question;
+        $("studyAnswer").textContent = current.answer;
+        $("studyAnswerBox").hidden = true;
+        $("showAnswerBtn").hidden = false;
+        $("studyExplanation").hidden = true;
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    async function explain() {
+      if (!current) return;
+      $("studyExplanation").hidden = false;
+      $("studyExplanation").textContent = "Thinking...";
+      try {
+        const data = await api("/study/explain", "POST", { question_id: current.id });
+        $("studyExplanation").textContent = data.explanation;
+      } catch (e) {
+        $("studyExplanation").hidden = true;
+        say(e.message);
+      }
+    }
+
+    async function rate(quality) {
+      if (!current) return;
+      try {
+        const result = await api("/study/answer", "POST", { question_id: current.id, quality: quality });
+        say("Saved. Next review in " + result.interval_days + " day(s).");
+        loadStudy();
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    // ---------- progress ----------
+
+    async function loadProgress() {
+      try {
+        const items = await api("/mastery");
+        const box = $("mastery");
+        box.textContent = "";
+        if (items.length === 0) {
+          box.textContent = "No answers yet. Study some questions first.";
+          return;
+        }
+        for (const m of items) {
+          const row = document.createElement("div");
+          row.className = "card";
+          row.textContent = m.topic + ": " + m.correct_answers + " of " + m.total_answers +
+            " correct (" + m.mastery_percent + "%)";
+          box.appendChild(row);
+        }
+      } catch (e) {
+        say(e.message);
+      }
+    }
+
+    // ---------- chat ----------
 
     function showSources(sources) {
       $("sources").textContent = "";
@@ -149,9 +428,12 @@
       }
     }
 
+    // ---------- wiring ----------
+
     $("loginBtn").addEventListener("click", login);
     $("signupBtn").addEventListener("click", signup);
-    $("logoutBtn").addEventListener("click", logout);
+    $("logoutBtn").addEventListener("click", signOut);
+    $("saveNoteBtn").addEventListener("click", saveNote);
     $("askBtn").addEventListener("click", ask);
     $("newChatBtn").addEventListener("click", () => {
       conversationId = 0;
@@ -160,6 +442,17 @@
     });
     $("question").addEventListener("keydown", (e) => {
       if (e.key === "Enter") ask();
+    });
+    $("showAnswerBtn").addEventListener("click", () => {
+      $("studyAnswerBox").hidden = false;
+      $("showAnswerBtn").hidden = true;
+    });
+    $("explainBtn").addEventListener("click", explain);
+    document.querySelectorAll("button[data-q]").forEach((b) => {
+      b.addEventListener("click", () => rate(Number(b.dataset.q)));
+    });
+    document.querySelectorAll("button[data-tab]").forEach((b) => {
+      b.addEventListener("click", () => openTab(b.dataset.tab));
     });
 
     showPage();

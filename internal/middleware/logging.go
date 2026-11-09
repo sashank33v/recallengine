@@ -1,10 +1,19 @@
 package middleware
 
 import (
+	"expvar"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"time"
+)
+
+var (
+	requestsTotal      = expvar.NewInt("requests_total")
+	requestsByStatus   = expvar.NewMap("requests_by_status")
+	requestBYRoute     = expvar.NewMap("requests_by_route")
+	requestMillisTotal = expvar.NewInt("request_duration_ms_total")
 )
 
 type statusWriter struct {
@@ -30,7 +39,14 @@ func Logging(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 
 		next.ServeHTTP(sw, r)
-
+		route := r.Pattern
+		if route == "" {
+			route = "unmatched"
+			requestsTotal.Add(1)
+			requestsByStatus.Add(strconv.Itoa(sw.status), 1)
+			requestBYRoute.Add(route, 1)
+			requestMillisTotal.Add(int64(time.Since(start).Milliseconds()))
+		}
 		slog.Info("request",
 			"method", r.Method,
 			"path", r.URL.Path,

@@ -27,3 +27,9 @@ func (r *SessionRepository) GetUserID(ctx context.Context, tokenHash string) (in
 	err := r.db.QueryRowContext(ctx, query, tokenHash).Scan(&userID)
 	return userID, err
 }
+
+func (r *SessionRepository) Delete(ctx context.Context, tokenHash string) error {
+	query := `DELETE FROM sessions WHERE token_hash = $1`
+	_, err := r.db.ExecContext(ctx, query, tokenHash)
+	return err
+}

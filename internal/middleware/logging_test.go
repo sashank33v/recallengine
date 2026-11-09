@@ -39,3 +39,17 @@ func TestStatusWriterSupportsFlush(t *testing.T) {
 		t.Error("statusWriter must support Flush, or streaming breaks")
 	}
 }
+func TestLoggingCountsRequests(t *testing.T) {
+	before := requestsTotal.Value()
+
+	handler := Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil))
+	if requestsTotal.Value() != before+1 {
+		t.Error("the request was not counted")
+	}
+	if requestsByStatus.Get("418") == nil {
+		t.Error("status 418 was not counted")
+	}
+}

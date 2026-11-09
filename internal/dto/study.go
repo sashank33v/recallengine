@@ -14,3 +14,10 @@ type AnswerResponse struct {
 	EaseFactor   float64   `json:"ease_factor"`
 	NextDueAt    time.Time `json:"next_due_at"`
 }
+type ExplainRequest struct {
+	QuestionID int64 `json:"question_id"`
+}
+
+type ExplainResponse struct {
+	Explaination string `json:"explanation"`
+}

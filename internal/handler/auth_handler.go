@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/sashank33v/recallengine/internal/dto"
 	"github.com/sashank33v/recallengine/internal/middleware"
@@ -78,4 +79,16 @@ func (h *Authhandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]int64{"user_id": userId})
 
+}
+
+func (h *Authhandler) Logout(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+	err := h.authService.Logout(r.Context(), token)
+	if err != nil {
+		log.Println("logout error: ", err)
+		writeError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 }
